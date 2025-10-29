@@ -9,12 +9,16 @@ import requests
 import os
 from dotenv import load_dotenv
 from typing import Dict, Any
+from openai import OpenAI
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (with error handling)
+try:
+    load_dotenv()
+except:
+    pass  # Continue without .env file
 
 # Import configuration
-from config import NEMO_API_URL, NEMO_API_KEY, API_TIMEOUT, MAX_TOKENS, TEMPERATURE, validate_config
+from config import NEMO_API_URL, NEMO_API_KEY, NEMO_MODEL, API_TIMEOUT, MAX_TOKENS, TEMPERATURE, validate_config
 
 app = FastAPI()
 #This app caches prices for 15 seconds to avoid API limits.
@@ -126,28 +130,44 @@ def validate_ticker(ticker: str):
 
 # NeMo Integration Functions
 def send_to_nemo(data: Dict[str, Any], prompt_template: str) -> Dict[str, Any]:
-    """Send data to NVIDIA NeMo 9B model"""
+    """Send data to NVIDIA Nemotron model using OpenAI-compatible API"""
     if not NEMO_API_KEY:
         raise HTTPException(status_code=500, detail="NeMo API key not configured")
     
-    headers = {
-        "Authorization": f"Bearer {NEMO_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": "nemo-9b",
-        "prompt": prompt_template.format(data=data),
-        "max_tokens": MAX_TOKENS,
-        "temperature": TEMPERATURE,
-        "top_p": 0.9
-    }
-    
     try:
-        response = requests.post(NEMO_API_URL, headers=headers, json=payload, timeout=API_TIMEOUT)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
+        # Initialize OpenAI client with NVIDIA endpoint
+        client = OpenAI(
+            base_url=NEMO_API_URL,
+            api_key=NEMO_API_KEY
+        )
+        
+        # Format the prompt
+        formatted_prompt = prompt_template.format(data=data)
+        
+        # Create completion using OpenAI-compatible API
+        completion = client.chat.completions.create(
+            model=NEMO_MODEL,
+            messages=[
+                {"role": "system", "content": "You are an expert financial analyst. Provide clear, data-driven investment recommendations."},
+                {"role": "user", "content": formatted_prompt}
+            ],
+            temperature=TEMPERATURE,
+            top_p=0.95,
+            max_tokens=MAX_TOKENS,
+            frequency_penalty=0,
+            presence_penalty=0
+        )
+        
+        # Extract the response
+        response_text = completion.choices[0].message.content
+        
+        return {
+            "generated_text": response_text,
+            "model": NEMO_MODEL,
+            "usage": completion.usage.__dict__ if completion.usage else {}
+        }
+        
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"NeMo API error: {str(e)}")
 
 def prepare_stock_data(symbol: str, period: str = "1mo") -> Dict[str, Any]:
@@ -283,3 +303,45 @@ def quick_analysis(symbol: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Quick analysis failed: {str(e)}")
+
+@app.get("/api/quick-decision/{symbol}")
+def get_quick_decision(symbol: str):
+    """Get quick buy/hold/sell decision from NeMo"""
+    try:
+        stock_data = prepare_stock_data(symbol, "5d")
+        
+        quick_prompt = """
+        Analyze this stock and provide ONLY a buy/hold/sell recommendation:
+
+        {data}
+
+        Respond in this exact format:
+        DECISION: [BUY/HOLD/SELL]
+        REASON: [One sentence explaining why]
+        """
+        
+        nemo_response = send_to_nemo(stock_data, quick_prompt)
+        analysis_text = nemo_response.get('generated_text', '')
+        
+        # Extract decision
+        lines = analysis_text.split('\n')
+        decision = "HOLD"
+        reason = "Analysis unavailable"
+        
+        for line in lines:
+            if line.startswith("DECISION:"):
+                decision = line.split(":", 1)[1].strip()
+            elif line.startswith("REASON:"):
+                reason = line.split(":", 1)[1].strip()
+        
+        return {
+            "symbol": symbol.upper(),
+            "decision": decision,
+            "reason": reason,
+            "data": stock_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Quick decision failed: {str(e)}")
