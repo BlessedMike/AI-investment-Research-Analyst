@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import PriceChart from '../components/PriceChart';
 
 interface StockPrice {
   symbol: string;
@@ -244,6 +245,13 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* Price Chart */}
+        {symbol && (
+          <div className="mb-8">
+            <PriceChart symbol={symbol} period="30d" />
+          </div>
+        )}
 
         {/* Market Overview */}
         <div className="bg-white rounded-lg shadow-md p-6">
