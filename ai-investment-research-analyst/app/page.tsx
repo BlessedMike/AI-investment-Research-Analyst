@@ -15,15 +15,6 @@ interface MarketData {
   change_percent: number;
 }
 
-interface DecisionData {
-  recommendation: string;
-  confidence: string;
-  price_target: string;
-  time_horizon: string;
-  analysis: string;
-  key_factors: string[];
-}
-
 interface QuickDecision {
   decision: string;
   reason: string;
@@ -35,17 +26,14 @@ export default function Home() {
   const [symbol, setSymbol] = useState('AAPL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [decision, setDecision] = useState<DecisionData | null>(null);
   const [quickDecision, setQuickDecision] = useState<QuickDecision | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-
-  const API_BASE = 'http://localhost:8000';
 
   const fetchStockPrice = async (ticker: string) => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE}/api/price/${ticker}`);
+      const response = await fetch(`http://localhost:8000/api/price/${ticker}`);
       if (response.ok) {
         const data = await response.json();
         setStockPrice(data);
@@ -61,7 +49,7 @@ export default function Home() {
 
   const fetchMarketData = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/ticker`);
+      const response = await fetch(`http://localhost:8000/api/ticker`);
       if (response.ok) {
         const data = await response.json();
         setMarketData(data);
@@ -71,32 +59,18 @@ export default function Home() {
     }
   };
 
-  const fetchFullAnalysis = async (ticker: string) => {
+  const fetchQuickDecision = async (ticker: string) => {
     setAnalyzing(true);
     try {
-      const response = await fetch(`${API_BASE}/api/analyze/${ticker}`, {
-        method: 'POST'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setDecision(data.decision);
-      }
-    } catch (err) {
-      console.error('Error fetching analysis:', err);
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  const fetchQuickDecision = async (ticker: string) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/quick-decision/${ticker}`);
+      const response = await fetch(`http://localhost:8000/api/quick-decision/${ticker}`);
       if (response.ok) {
         const data = await response.json();
         setQuickDecision(data);
       }
     } catch (err) {
       console.error('Error fetching quick decision:', err);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -167,83 +141,27 @@ export default function Home() {
         {/* AI Analysis Section */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-2xl font-semibold mb-4">🤖 AI Analysis</h2>
-          
-          {/* Quick Decision */}
-          {quickDecision && (
-            <div className="mb-6">
-              <div className="flex items-center gap-4 mb-4">
-                <h3 className="text-lg font-semibold">Quick Decision</h3>
-                <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                  quickDecision.decision === 'BUY' ? 'bg-green-100 text-green-800' :
-                  quickDecision.decision === 'SELL' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {quickDecision.decision}
-                </span>
-              </div>
-              <p className="text-gray-700">{quickDecision.reason}</p>
-            </div>
-          )}
-
-          {/* Full Analysis Button */}
+        
+          {/* Quick Analysis Button */}
           <div className="mb-4">
             <button
-              onClick={() => fetchFullAnalysis(symbol)}
+              onClick={() => fetchQuickDecision(symbol)}
               disabled={analyzing}
               className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
             >
-              {analyzing ? 'Analyzing...' : 'Get Full AI Analysis'}
+              {analyzing ? 'Analyzing...' : 'Get Quick AI Analysis'}
             </button>
           </div>
 
-          {/* Full Analysis Results */}
-          {decision && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-gray-700 mb-2">Recommendation</h4>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                      decision.recommendation === 'BUY' ? 'bg-green-100 text-green-800' :
-                      decision.recommendation === 'SELL' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {decision.recommendation}
-                    </span>
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      decision.confidence === 'HIGH' ? 'bg-blue-100 text-blue-800' :
-                      decision.confidence === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {decision.confidence} Confidence
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-gray-700 mb-2">Price Target</h4>
-                  <p className="text-lg font-bold text-gray-900">{decision.price_target}</p>
-                  <p className="text-sm text-gray-600">{decision.time_horizon}</p>
-                </div>
+          {/* Quick Decision Result (rendered when present) */}
+          {quickDecision && (
+            <div className="bg-gray-50 p-4 rounded-lg mb-4">
+            <h4 className="font-semibold text-gray-700 mb-1">Quick Decision</h4>
+              <p className="text-lg font-bold text-gray-900">{quickDecision.decision}</p>
+              <p className="text-sm text-gray-600 mt-2">{quickDecision.reason}</p>
               </div>
-
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-gray-700 mb-2">Analysis</h4>
-                <p className="text-gray-700">{decision.analysis}</p>
-              </div>
-
-              {decision.key_factors.length > 0 && (
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-gray-700 mb-2">Key Factors</h4>
-                  <ul className="list-disc list-inside space-y-1">
-                    {decision.key_factors.map((factor, index) => (
-                      <li key={index} className="text-gray-700">{factor}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
           )}
+
         </div>
 
         {/* Price Chart */}
@@ -253,9 +171,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* Market Overview */}
+        {/* Market Overview*/}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold mb-4">📊 Market Overview</h2>
+          <h2 className="text-2xl font-semibold mb-4">📊 Market Overview (Daily Percent Change)</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {marketData.map((item, index) => (
               <div key={index} className="bg-gray-50 p-4 rounded-lg text-center">

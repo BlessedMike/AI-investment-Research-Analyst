@@ -11,9 +11,9 @@ except:
     pass  # Continue without .env file
 
 # NeMo API Configuration (OpenAI-compatible)
-NEMO_API_URL = os.getenv("NEMO_API_URL", "https://integrate.api.nvidia.com/v1")
-NEMO_API_KEY = os.getenv("NEMO_API_KEY", "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")
-NEMO_MODEL = os.getenv("NEMO_MODEL", "nvidia/nvidia-nemotron-nano-9b-v2")
+NEMO_API_URL = os.getenv('NEMO_API_URL')
+NEMO_API_KEY = os.getenv('NEMO_API_KEY')
+NEMO_MODEL = os.getenv('NEMO_MODEL')
 
 # API Configuration
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))

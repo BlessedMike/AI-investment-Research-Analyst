@@ -10,22 +10,13 @@ import os
 from dotenv import load_dotenv
 from typing import Dict, Any
 from openai import OpenAI
-
-# Load environment variables (with error handling)
-try:
-    load_dotenv()
-except:
-    pass  # Continue without .env file
-
-# Import configuration
-from config import NEMO_API_URL, NEMO_API_KEY, NEMO_MODEL, API_TIMEOUT, MAX_TOKENS, TEMPERATURE, validate_config
+from config import NEMO_API_KEY, NEMO_MODEL, NEMO_API_URL, API_TIMEOUT, MAX_TOKENS, TEMPERATURE, CACHE_TTL, CACHE_MAX_SIZE,LOG_LEVEL, DEBUG, validate_config
 
 app = FastAPI()
-#This app caches prices for 15 seconds to avoid API limits.
-#For live-trading, this would be replaced by a real-time paid data feed.
 
 # Validate configuration on startup
 validate_config()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -89,31 +80,6 @@ def get_ticker_data():
                 "change_percent": round(change_percent, 2)
             })
     return data  
-
-def predict_price(ticker: str):
-    # Fetch last 6 months of daily data
-    data = yf.download(ticker, period="3mo", interval="1d")
-    if data.empty:
-        return None
-   
-    data = data.reset_index()
-    data["Day"] = np.arange(len(data))
-   
-    X = data[["Day"]]
-    y = data["Close"]
-    model = LinearRegression()
-    model.fit(X, y)
-
-    next_day = [[len(data)]]
-    predicted_price = model.predict(next_day)[0]
-    return round(float(predicted_price), 2)
-
-@app.get("/predict/{ticker}")
-def get_prediction(ticker: str):
-    price = predict_price(ticker)
-    if price is None:
-        raise HTTPException(status_code=404, detail="Ticker not found")
-    return {"ticker": ticker.upper(), "predicted_price": price}
 
 @app.get("/api/validate/{ticker}")
 def validate_ticker(ticker: str):
@@ -217,93 +183,8 @@ def prepare_stock_data(symbol: str, period: str = "1mo") -> Dict[str, Any]:
             "current_vs_high": round(((current_price - data["High"].max()) / data["High"].max()) * 100, 2)
         },
         "data_points": len(data)
-    }
-
-@app.post("/api/analyze/{symbol}")
-def analyze_stock_with_nemo(symbol: str, period: str = "1mo"):
-    """Analyze stock data using NVIDIA NeMo 9B"""
-    try:
-        # Prepare stock data
-        stock_data = prepare_stock_data(symbol, period)
-        
-        # Create comprehensive prompt for NeMo
-        prompt_template = """
-        As an expert financial analyst, analyze this stock data and provide detailed investment insights:
-
-        Stock Data: {data}
-
-        Please provide a comprehensive analysis including:
-
-        1. **Technical Analysis Summary**:
-           - Price trend analysis
-           - Moving average signals
-           - Volatility assessment
-           - Volume analysis
-
-        2. **Risk Assessment**:
-           - Volatility risk level
-           - Price position relative to 52-week range
-           - Volume patterns and liquidity
-
-        3. **Investment Recommendation**:
-           - Buy/Hold/Sell recommendation with reasoning
-           - Price targets (if applicable)
-           - Time horizon for the recommendation
-
-        4. **Key Factors to Watch**:
-           - Important technical levels
-           - Volume patterns to monitor
-           - Market conditions that could affect this stock
-
-        5. **Summary**:
-           - Brief 2-3 sentence summary of the analysis
-           - Overall risk-reward assessment
-
-        Please be specific and data-driven in your analysis.
-        """
-        
-        # Send to NeMo
-        nemo_response = send_to_nemo(stock_data, prompt_template)
-        
-        return {
-            "symbol": symbol.upper(),
-            "analysis": nemo_response,
-            "raw_data": stock_data,
-            "timestamp": pd.Timestamp.now().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
-
-@app.get("/api/quick-analysis/{symbol}")
-def quick_analysis(symbol: str):
-    """Quick NeMo analysis with simplified prompt"""
-    try:
-        stock_data = prepare_stock_data(symbol, "5d")
-        
-        quick_prompt = """
-        Provide a brief investment analysis for this stock:
-        
-        {data}
-        
-        Give a 2-3 sentence summary with Buy/Hold/Sell recommendation and key reasoning.
-        """
-        
-        nemo_response = send_to_nemo(stock_data, quick_prompt)
-        
-        return {
-            "symbol": symbol.upper(),
-            "quick_analysis": nemo_response,
-            "data": stock_data
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Quick analysis failed: {str(e)}")
-
+    }      
+       
 @app.get("/api/quick-decision/{symbol}")
 def get_quick_decision(symbol: str):
     """Get quick buy/hold/sell decision from NeMo"""
